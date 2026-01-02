@@ -20,7 +20,7 @@ fn main() {
         .add_systems(
             Update,
             (
-                handle_release.run_if(input_just_released(MouseButton::Left)),
+                // handle_release.run_if(input_just_released(MouseButton::Left)),
                 game_tick,
             ),
         )
@@ -73,11 +73,6 @@ fn toggle_egg<E: Debug + Clone + Reflect>()
     }
 }
 
-fn handle_release(mut game_state: ResMut<GameState>) {
-    println!("Handling release");
-    game_state.has_egg = false;
-}
-
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -90,6 +85,12 @@ fn setup(
     // Set score and egg holding state
     game_state.score = 0;
     game_state.has_egg = false;
+
+    commands.spawn((
+        Sprite::from_image(asset_server.load("egg_pixel.png")),
+        Transform::from_xyz(-5000.0, 0.0, 1.0).with_scale(Vec3::splat(8.0)), // way offscreen
+        Egg,
+    ));
 
     commands
         .spawn((
@@ -117,39 +118,45 @@ fn setup(
             Pickable::default(),
         ))
         .observe(toggle_egg::<Pointer<Pressed>>());
-
-    commands.spawn((
-        Sprite::from_image(asset_server.load("egg_pixel.png")),
-        Transform::from_xyz(-5000.0, 0.0, 0.0).with_scale(Vec3::splat(8.0)), // way offscreen
-        Egg,
-        Pickable::default(),
-    ));
 }
 
 fn game_tick(
     window: Single<&Window, With<PrimaryWindow>>,
-    camera: Single<(&Camera, &GlobalTransform)>,
+    q_camera: Single<(&Camera, &GlobalTransform)>,
     mut mousebtn_evr: EventReader<MouseButtonInput>,
-    game_state: Res<GameState>,
+    game_state: ResMut<GameState>,
     mut q_egg: Query<&mut Transform, With<Egg>>,
 ) {
     // TODO: If mouse button is released, toggle egg state
     for ev in mousebtn_evr.read() {
         if ev.state == ButtonState::Released {
             toggle_egg::<Pointer<Released>>();
+            //handle_release(game_state);
         }
     }
 
     if game_state.has_egg {
-        let mut follower_transform = q_egg.single_mut();
+        let (camera, camera_transform) = *q_camera;
 
         if let Some(cursor_pos) = window.cursor_position() {
-            if let Ok(world_pos) = camera
-                .get()
-                .viewport_to_world_2d(camera.get().transform, cursor_pos)
-            {
-                follower_transform.unwrap().translation = Vec3::new(world_pos.x, world_pos.y, 0.0);
+            // Correct for potential custom viewports (important in 0.15+)
+            let viewport_pos = if let Some(rect) = camera.logical_viewport_rect() {
+                cursor_pos - rect.min
+            } else {
+                cursor_pos
+            };
+
+            // Convert the adjusted position to world space
+            if let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, viewport_pos) {
+                if let Ok(mut transform) = q_egg.single_mut() {
+                    transform.translation.x = world_pos.x;
+                    transform.translation.y = world_pos.y;
+                }
             }
+        }
+    } else {
+        if let Ok(mut transform) = q_egg.single_mut() {
+            transform.translation.y -= 7.0;
         }
     }
 }
