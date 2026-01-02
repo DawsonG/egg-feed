@@ -20,7 +20,7 @@ fn main() {
         .add_systems(
             Update,
             (
-                // handle_release.run_if(input_just_released(MouseButton::Left)),
+                handle_release.run_if(input_just_released(MouseButton::Left)),
                 game_tick,
             ),
         )
@@ -71,6 +71,11 @@ fn toggle_egg<E: Debug + Clone + Reflect>()
             game_state.has_egg = true;
         }
     }
+}
+
+fn handle_release(mut game_state: ResMut<GameState>) {
+    println!("Handling release");
+    game_state.has_egg = false;
 }
 
 fn setup(
