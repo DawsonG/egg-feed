@@ -1,6 +1,6 @@
 use bevy::{
     color::palettes::css::WHITE,
-    input::{ButtonState, common_conditions::input_just_released, mouse::MouseButtonInput},
+    input::{common_conditions::input_just_released},
     prelude::*,
     window::PrimaryWindow,
 };
@@ -57,29 +57,28 @@ fn toggle_mouth<E: EntityEvent + Debug + Clone + Reflect>()
     }
 }
 
-fn toggle_egg<E: EntityEvent + Debug + Clone + Reflect>()
--> impl Fn(On<E>, Query<&mut Transform, With<Egg>>, Query<&mut Sprite>, ResMut<GameState>) {
-    move |ev, mut egg, mut sprites, mut game_state| {
+fn grab_egg<E: EntityEvent + Debug + Clone + Reflect>() -> impl Fn(On<E>, ResMut<GameState>) {
+    move |_ev, mut game_state| {
+        game_state.has_egg = true;
+    }
+}
+
+fn drop_egg<E: EntityEvent + Debug + Clone + Reflect>()
+-> impl Fn(On<E>, Query<&mut Transform, With<Egg>>, ResMut<GameState>) {
+    move |_ev, mut q_egg, mut game_state| {
         let event_type = std::any::type_name::<E>();
-        println!("Event type: {}", event_type);
-        if event_type.contains("Released") && game_state.has_egg {
-            println!("Releasing egg");
+        if event_type.contains("Release") && game_state.has_egg {
             game_state.has_egg = false;
             game_state.score += 1;
-            egg.single_mut().unwrap().translation.x = 5000.0;
+            if let Ok(mut transform) = q_egg.single_mut() {
+                transform.translation.x = -5000.0;
+            }
             println!("Score: {}", game_state.score);
-        } else {
-            let Ok(_sprite) = sprites.get_mut(ev.event_target()) else {
-                return;
-            };
-            println!("Grabbing egg");
-            game_state.has_egg = true;
         }
     }
 }
 
 fn handle_release(mut game_state: ResMut<GameState>) {
-    println!("Handling release");
     game_state.has_egg = false;
 }
 
@@ -123,7 +122,7 @@ fn setup(
         ))
         .observe(toggle_mouth::<Pointer<Over>>()) // change image to open mouth
         .observe(toggle_mouth::<Pointer<Out>>())
-        .observe(toggle_egg::<Pointer<Release>>()); // add point
+        .observe(drop_egg::<Pointer<Release>>()); // add point
 
     commands
         .spawn((
@@ -131,14 +130,27 @@ fn setup(
             Transform::from_xyz(500.0, 0.0, 0.0).with_scale(Vec3::splat(8.0)),
             Pickable::default(),
         ))
-        .observe(toggle_egg::<Pointer<Press>>());
+        .observe(grab_egg::<Pointer<Press>>());
 
     commands
         .spawn((
-            // Text::new("Eggs fed: "),
+            Text::new("Eggs fed: "),
             TextFont {
                 font: asset_server.load("slkscrb.ttf"),
                 font_size: 42.0,
+                ..default()
+            },
+            Node {
+                position_type: PositionType::Absolute,
+                bottom: px(5),
+                left: px(15),
+                ..Default::default()
+            },
+        )).with_child((
+            TextSpan::default(),
+            TextFont {
+                font: asset_server.load("slkscrb.ttf"),
+                font_size: 46.0,
                 ..default()
             },
             TextColor(WHITE.into()),
@@ -149,21 +161,14 @@ fn setup(
 fn game_tick(
     window: Single<&Window, With<PrimaryWindow>>,
     q_camera: Single<(&Camera, &GlobalTransform)>,
-    mut mousebtn_evr: MessageReader<MouseButtonInput>,
     game_state: ResMut<GameState>,
     mut q_egg: Query<&mut Transform, With<Egg>>,
     mut q_score_text: Query<&mut TextSpan, With<ScoreText>>,
 ) {
-    for ev in mousebtn_evr.read() {
-        if ev.state == ButtonState::Released {
-            toggle_egg::<Pointer<Release>>(); // compiler issues a warning, but this is called as expected
-        }
-    }
-
     // update score text
     for mut span in &mut q_score_text {
         // Update the value of the second section
-        **span = format!("Score: {}", game_state.score.clone());
+        **span = format!("{}", game_state.score.clone());
     }
 
 

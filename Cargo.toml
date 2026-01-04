@@ -19,7 +19,8 @@ features = [
     "bevy_sprite_picking_backend",
     "bevy_text",
     "bevy_winit",
-    "dynamic_linking",
+    "bevy_ui",
+    "bevy_ui_render",
     "png"
 ]
 
